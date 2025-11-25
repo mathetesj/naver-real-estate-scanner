@@ -36,66 +36,53 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 유틸리티 함수 ---
+# --- 3. 유틸리티 함수 (버그 수정 완료) ---
 def format_money(val):
     if val == 0: return "-"
     uk = val // 10000
     man = val % 10000
-    if uk > 0 and man > 0: return f"{uk}억 {man.toLocaleString()}"
+    
+    # 수정된 부분: f-string 포맷팅 사용 ({:,})
+    if uk > 0 and man > 0: return f"{uk}억 {man:,}"
     if uk > 0: return f"{uk}억"
-    return f"{man.toLocaleString()}만"
+    return f"{man:,}만"
 
 # --- 4. API 통신 함수 (차단 회피 강화) ---
 def get_headers(referer_url="https://new.land.naver.com/"):
-    """네이버 봇 차단을 피하기 위한 랜덤 헤더 생성"""
     user_agents = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/119.0"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
     ]
     return {
         "User-Agent": random.choice(user_agents),
         "Referer": referer_url,
-        "Accept": "application/json, text/plain, */*",
+        "Accept": "application/json",
         "Accept-Encoding": "gzip, deflate, br",
-        "Origin": "https://new.land.naver.com",
-        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin"
+        "Origin": "https://new.land.naver.com"
     }
 
 def search_complex_id(keyword):
-    """단지 검색 및 디버깅"""
     url = "https://new.land.naver.com/api/search"
     params = {'keyword': keyword}
     try:
-        time.sleep(random.uniform(0.5, 1.5))
+        time.sleep(random.uniform(0.3, 1.0))
         res = requests.get(url, headers=get_headers(), params=params, timeout=5)
-        
         if res.status_code == 200:
             data = res.json()
             if data.get('suggests'):
                 for item in data['suggests']:
                     if item.get('cortarType') == 'AptComplex':
                         return item.get('cortarName'), item.get('complexNo')
-            return "NOT_FOUND", None # 결과 없음
-        else:
-            return f"BLOCKED_{res.status_code}", None # 차단됨 (예: 429)
+            return "NOT_FOUND", None
+        return f"BLOCKED_{res.status_code}", None
     except Exception as e:
         return f"ERROR_{str(e)}", None
 
 def fetch_complex_data(complex_id, complex_name):
     url = f"https://new.land.naver.com/api/articles/complex/{complex_id}"
-    params = {
-        'realEstateType': 'APT',
-        'tradeType': 'A1:B1:B2',
-        'complexNo': complex_id,
-    }
+    params = {'realEstateType': 'APT', 'tradeType': 'A1:B1:B2', 'complexNo': complex_id}
     try:
-        time.sleep(random.uniform(0.5, 2.0))
+        time.sleep(random.uniform(0.5, 1.5))
         res = requests.get(url, headers=get_headers(f"https://new.land.naver.com/complexes/{complex_id}"), params=params, timeout=10)
         
         if res.status_code == 200:
@@ -103,7 +90,6 @@ def fetch_complex_data(complex_id, complex_name):
             articles = data.get('articleList', [])
             parsed_list = []
             for art in articles:
-                # 가격 파싱 로직
                 p_str = art.get('dealOrWarrantPrc', '0').replace(',', '')
                 r_str = art.get('rentPrc', '0').replace(',', '')
                 price = 0
@@ -128,8 +114,7 @@ def fetch_complex_data(complex_id, complex_name):
                     '확인일': art.get('confirmedDate')
                 })
             return parsed_list
-        else:
-            return "BLOCKED"
+        return "BLOCKED"
     except:
         return "ERROR"
 
@@ -137,7 +122,7 @@ def fetch_complex_data(complex_id, complex_name):
 def generate_demo_data(complex_list):
     dummy = []
     names = [c['name'] for c in complex_list] if complex_list else ['예시단지A', '예시단지B']
-    for _ in range(10):
+    for _ in range(15):
         c_name = random.choice(names)
         t_type = random.choice(['매매', '전세', '월세'])
         price = random.randint(100000, 250000)
@@ -149,7 +134,7 @@ def generate_demo_data(complex_list):
             
         dummy.append({
             '단지명': c_name, '거래유형': t_type, '가격(만원)': price, '월세(만원)': rent,
-            '동': f"{random.randint(101, 105)}동", '층': "고/25", '면적': "84㎡", '설명': "데모 데이터", '확인일': "2024-03-20"
+            '동': f"{random.randint(101, 105)}동", '층': "고/25", '면적': "84㎡", '설명': "데모 데이터입니다", '확인일': "2024-03-20"
         })
     return pd.DataFrame(dummy)
 
@@ -163,7 +148,7 @@ if 'demo_mode' not in st.session_state:
 with st.sidebar:
     st.title("🛠️ 설정")
     st.markdown("### 1. 단지 추가")
-    with st.form("search", clear_on_submit=False): # 엔터키 이슈 방지
+    with st.form("search", clear_on_submit=False):
         col1, col2 = st.columns([3, 1])
         keyword = col1.text_input("단지명", placeholder="예: 헬리오시티", label_visibility="collapsed")
         submit = col2.form_submit_button("검색")
@@ -177,11 +162,9 @@ with st.sidebar:
                 else:
                     st.warning("⚠️ 이미 목록에 있습니다.")
             elif name and "BLOCKED" in name:
-                st.error(f"🚫 네이버 차단됨 ({name}). 데모 모드를 켜주세요.")
-            elif name and "ERROR" in name:
-                st.error(f"❌ 오류 발생: {name}")
+                st.error("🚫 네이버 접속 차단됨. 데모 모드를 사용하세요.")
             else:
-                st.error("🔍 단지를 찾을 수 없습니다. (정확한 아파트명 입력)")
+                st.error("🔍 단지를 찾을 수 없습니다.")
 
     st.markdown("### 2. 관리 목록")
     if st.session_state.complex_list:
@@ -208,7 +191,6 @@ else:
     all_data = []
     blocked = False
     
-    # 캐시 없이 UI 표시하며 진행
     progress_text = st.empty()
     bar = st.progress(0)
     
@@ -227,24 +209,31 @@ else:
     bar.empty(); progress_text.empty()
     
     if blocked and not all_data:
-        st.error("🚨 네이버가 서버 접근을 차단했습니다. 사이드바의 '데모 모드'를 켜서 UI를 확인하거나, 잠시 후 다시 시도해주세요.")
+        st.error("🚨 네이버 서버 접근이 차단되었습니다. 사이드바의 '데모 모드'를 켜주세요.")
         df = pd.DataFrame()
     else:
         df = pd.DataFrame(all_data)
 
 if not df.empty:
+    # 환산가 계산
     df['환산가(만원)'] = df.apply(lambda x: x['가격(만원)'] + (x['월세(만원)']/rate*10000) if x['월세(만원)']>0 else x['가격(만원)'], axis=1)
     
     c1, c2 = st.columns(2)
     with c1: f_type = st.multiselect("유형", df['거래유형'].unique(), default=df['거래유형'].unique())
     with c2: sort = st.selectbox("정렬", ["환산가 낮은순", "높은순"])
     
+    # 필터링
     df = df[df['거래유형'].isin(f_type)]
+    
+    # 정렬
     if sort == "환산가 낮은순": df = df.sort_values("환산가(만원)")
     else: df = df.sort_values("환산가(만원)", ascending=False)
     
+    # 카드 출력
     for _, row in df.iterrows():
         b_cls = "badge-trade" if "매매" in row['거래유형'] else "badge-jeonse" if "전세" in row['거래유형'] else "badge-rent"
+        
+        # 가격 포맷팅 (여기가 문제였던 부분)
         price = format_money(row['가격(만원)'])
         if row['월세(만원)'] > 0: price += f" / {row['월세(만원)']}"
         conv = format_money(int(row['환산가(만원)']))
